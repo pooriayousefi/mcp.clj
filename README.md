@@ -143,10 +143,6 @@ Once you compile your Clojure MCP server into an uberjar (or run it via `clj`), 
 
 ---
 
-Here is the updated License section to replace the bottom of your `README.md`.
-
----
-
 ## License
 
 Copyright © 2024 Pooria Yousefi
