@@ -3,13 +3,11 @@
   <modelVersion>4.0.0</modelVersion>
   <packaging>jar</packaging>
   
-  <!-- Updated groupId to match your Clojars username/deps.edn -->
   <groupId>org.clojars.pooriayousefi</groupId>
   <artifactId>mcp.clj</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.2</version>
   <name>mcp.clj</name>
   
-  <!-- Added professional metadata -->
   <description>Pure Clojure SDK for the Model Context Protocol (MCP)</description>
   <url>https://github.com/pooriayousefi/mcp.clj</url>
   <licenses>
@@ -39,6 +37,11 @@
   
   <build>
     <sourceDirectory>src</sourceDirectory>
+    <resources>
+      <resource>
+        <directory>src</directory>
+      </resource>
+    </resources>
   </build>
   
   <repositories>
