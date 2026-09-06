@@ -145,7 +145,7 @@ Once you compile your Clojure MCP server into an uberjar (or run it via `clj`), 
 
 ## License
 
-Copyright © 2024 Pooria Yousefi
+Copyright © 2026 Pooria Yousefi
 
 Licensed under the Eclipse Public License - v 2.0 (the "License");
 you may not use this file except in compliance with the License.
