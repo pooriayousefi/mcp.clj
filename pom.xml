@@ -5,7 +5,7 @@
   
   <groupId>org.clojars.pooriayousefi</groupId>
   <artifactId>mcp.clj</artifactId>
-  <version>0.1.2</version>
+  <version>0.1.3</version>
   <name>mcp.clj</name>
   
   <description>Pure Clojure SDK for the Model Context Protocol (MCP)</description>
@@ -14,7 +14,7 @@
     <url>https://github.com/pooriayousefi/mcp.clj</url>
     <connection>scm:git:https://github.com/pooriayousefi/mcp.clj.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/pooriayousefi/mcp.clj.git</developerConnection>
-    <tag>v0.1.2</tag>
+    <tag>v0.1.3</tag>
   </scm>
   <licenses>
     <license>
