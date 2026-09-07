@@ -10,6 +10,12 @@
   
   <description>Pure Clojure SDK for the Model Context Protocol (MCP)</description>
   <url>https://github.com/pooriayousefi/mcp.clj</url>
+  <scm>
+    <url>https://github.com/pooriayousefi/mcp.clj</url>
+    <connection>scm:git:https://github.com/pooriayousefi/mcp.clj.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/pooriayousefi/mcp.clj.git</developerConnection>
+    <tag>v0.1.2</tag>
+  </scm>
   <licenses>
     <license>
       <name>Eclipse Public License - v 2.0</name>
