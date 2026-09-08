@@ -3,3 +3,6 @@ target/
 *.jar
 .DS_Store
 nrepl-port
+pom.xml
+.lsp/
+.vscode/
