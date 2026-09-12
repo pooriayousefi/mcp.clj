@@ -1,3 +1,6 @@
+
+[![Clojars Project](https://img.shields.io/clojars/v/org.clojars.pooriayousefi/mcp.clj.svg)]
+
 # mcp.clj
 
 A pure, lightweight Clojure implementation of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
