@@ -73,7 +73,8 @@
         _ (when env
             (let [process-env (.environment builder)]
               (doseq [[k v] env]
-                (.put process-env k v))))
+                ;; Convert Clojure keywords to Java Strings!
+                (.put process-env (name k) (str v)))))
         process (.start builder)
         writer (PrintWriter. (.getOutputStream process))
         pending-requests (atom {})
