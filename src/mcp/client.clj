@@ -11,10 +11,12 @@
   "Initializes the MCP client. 
    transport-type: :stdio or :http
    target: vector of args for stdio, or URL string for http.
-   opts: map of options (e.g., {:client-name \"my-app\" :client-version \"1.0.0\"})"
+   opts: map of options (e.g., {:client-name \"my-app\" :env {...} :dir \"/path\"})"
   [transport-type target opts]
   (let [transport (case transport-type
-                    :stdio (mcp.stdio/create-stdio-transport target opts)
+                    :stdio (mcp.stdio/create-stdio-transport target
+                                                             :env (:env opts)
+                                                             :dir (:dir opts))
                     :http (mcp.http/create-http-transport target))
         client (->MCPClient transport (atom 0))
         capabilities {}] ; Define client capabilities here if needed

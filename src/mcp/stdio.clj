@@ -56,9 +56,17 @@
 (defn create-stdio-transport
   "Creates a StdioTransport. Expects a vector of command args.
    e.g., [\"npx\" \"-y\" \"@modelcontextprotocol/server-filesystem\" \"/tmp\"]"
-  [command-args & {:keys [notifications-callback]}]
+  [command-args & {:keys [notifications-callback env dir]}]
   (let [builder (ProcessBuilder. ^java.util.List command-args)
         _ (.redirectErrorStream builder true)
+        ;; Set working directory if provided (Cross-platform!)
+        _ (when dir
+            (.directory builder (java.io.File. dir)))
+        ;; Inject custom environment variables if provided
+        _ (when env
+            (let [process-env (.environment builder)]
+              (doseq [[k v] env]
+                (.put process-env k v))))
         process (.start builder)
         writer (PrintWriter. (.getOutputStream process))
         pending-requests (atom {})
