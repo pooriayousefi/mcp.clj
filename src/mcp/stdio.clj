@@ -11,17 +11,24 @@
   (let [reader (BufferedReader. (InputStreamReader. (.getInputStream process)))]
     (try
       (loop [line (.readLine reader)]
-        (when line
-          (when-let [msg (protocol/json->map line)]
-            (if (:id msg)
-              ;; It's a response: deliver to the matching promise
-              (when-let [p (get @pending-requests (:id msg))]
-                (deliver p msg)
-                (swap! pending-requests dissoc (:id msg)))
-              ;; It's a notification: pass to callback
-              (when notifications-callback
-                (notifications-callback msg))))
-          (recur (.readLine reader))))
+        (if line
+          ;; We got a line, process it.
+          (do
+            (when-let [msg (protocol/json->map line)]
+              (if (:id msg)
+                ;; It's a response: deliver to the matching promise
+                (when-let [p (get @pending-requests (:id msg))]
+                  (deliver p msg)
+                  (swap! pending-requests dissoc (:id msg)))
+                ;; It's a notification: pass to callback
+                (when notifications-callback
+                  (notifications-callback msg))))
+            (recur (.readLine reader)))
+
+          ;; EOF reached (process died)! Deliver errors to pending requests.
+          (doseq [[id p] @pending-requests]
+            (deliver p {:jsonrpc "2.0" :id id :error {:code -1 :message "Stdio process terminated"}})
+            (swap! pending-requests dissoc id))))
       (catch Exception _
         ;; Process died or stream closed. Deliver errors to pending requests.
         (doseq [[id p] @pending-requests]
