@@ -1,165 +1,323 @@
 # mcp.clj
-[![Clojars Project](https://img.shields.io/clojars/v/org.clojars.pooriayousefi/mcp.clj.svg)](https://clojars.org/org.clojars.pooriayousefi/mcp.clj)
 
-A pure, lightweight Clojure implementation of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+A small Clojure MCP client and server for **tool calling in agent runtimes**.
+It targets MCP **2026-07-28** and provides local stdio and remote Streamable
+HTTP transports, tool discovery/execution, and an adapter for OpenAI-compatible
+function calling.
 
-Built with zero Java SDK bloat, `mcp.clj` relies only on `clojure.data.json`, `clj-http`, and Java's built-in `ProcessBuilder`. It provides a complete, bidirectional ecosystem for both **MCP Clients** (to consume tools) and **MCP Servers** (to expose tools) directly in idiomatic Clojure.
+The project intentionally does not negotiate older MCP revisions. It
+implements only the tool-calling surface: it does not implement resources,
+prompts, sampling, elicitation, tasks, subscriptions, OAuth discovery, or the
+older initialization/session transports.
 
-## Features
+## What you will build
 
-- **Pure Clojure:** No heavy Java dependencies. Microscopic dependency tree.
-- **Bidirectional:** Includes both `mcp.client` and `mcp.server` namespaces.
-- **Modern Transports:**
-  - `stdio` transport (via `java.lang.ProcessBuilder`) for local subprocess communication.
-  - `StreamableHTTP` transport for the newest MCP spec (`2026-07-24`), supporting both standard JSON and Server-Sent Events (SSE) streaming responses.
-- **JSON-RPC 2.0 Compliant:** Handles request/response lifecycle, promises, and notifications out of the box.
+This tutorial walks through:
 
-## Installation
+1. Running the project and its tests.
+2. Creating and running a tool server.
+3. Connecting to one or more MCP servers.
+4. Giving their tools to an OpenAI-compatible model and executing its tool
+   calls.
 
-### Clojure CLI (`deps.edn`)
+## Requirements and running the project
 
-```clojure
-{:deps {org.clojure/clojure {:mvn/version "1.12.0"}
-        org.clojure/data.json {:mvn/version "2.5.0"}
-        clj-http/clj-http {:mvn/version "3.13.0"}}}
+- Java 17 or newer.
+- Clojure CLI.
+
+Clone the repository and run the test suite:
+
+```sh
+git clone https://github.com/pooriayousefi/mcp.clj.git
+cd mcp.clj
+clojure -M:test
 ```
 
-_(Once published to Clojars or Maven Central, you can replace the local deps with `mcp.clj/mcp.clj {:mvn/version "..."}`)_
+The `:test` alias adds `test/` to the classpath. Source namespaces are under
+`src/`. To check that the library namespaces compile:
 
----
-
-## Client Usage
-
-The `mcp.client` namespace provides a high-level API for connecting to any MCP server (native stdio or remote HTTP), fetching its tool schemas, and executing tools.
-
-### 1. Connecting via `stdio` (Local Subprocess)
-
-This spawns a background process (e.g., an `npx` command), handles the JSON-RPC handshake, and returns a connected client map.
-
-```clojure
-(require '[mcp.client :as client])
-
-;; Spawn the official Anthropic filesystem server as a subprocess
-(def c (client/connect :stdio
-                       ["npx" "-y" "@modelcontextprotocol/server-filesystem" "/tmp"]
-                       {:client-name "my-clojure-app"}))
+```sh
+clojure -M -e "(require 'mcp.protocol 'mcp.client 'mcp.server 'mcp.openai)"
 ```
 
-### 2. Connecting via `StreamableHTTP` (Remote)
+The project does not define an uberjar or native-image build. Run a server
+with the Clojure CLI, or package it using the build tooling of your application.
 
-For servers supporting the newest `2026-07-24` spec over HTTP.
+### Use this checkout as a dependency
+
+While developing another local Clojure application, add a local-root dependency
+to that application's `deps.edn` (adjust the path to this checkout):
 
 ```clojure
-(def c (client/connect :http
-                       "http://localhost:3000/mcp"
-                       {:client-name "my-clojure-app"}))
+{:deps {mcp.clj/mcp.clj {:local/root "../mcp.clj"}}}
 ```
 
-### 3. Listing and Calling Tools
+Your application can then require `mcp.client`, `mcp.server`, and
+`mcp.openai`. A published artifact can be used instead once a version is
+released.
+
+## 1. Build a tool server
+
+A server is a map created with `mcp.server/create-server`. Each tool has a
+unique name, an optional description, an object-shaped JSON Schema, and a
+handler. The handler is called with:
+
+1. The decoded argument map.
+2. A request context containing `:request`, `:client-info`,
+   `:client-capabilities`, and `:cancelled?`.
+
+The handler may return a string or a result map. Use `:content` for ordinary
+tool output; return `:structuredContent` when downstream code benefits from
+structured data. Tool errors should normally be returned with `:isError true`.
+Unhandled exceptions are also converted into tool-level error results.
 
 ```clojure
-;; Fetch available tool schemas (returns standard OpenAI-compatible JSON)
-(client/list-tools c)
+(ns demo.math
+  (:require [mcp.server :as mcp]))
 
-;; Call a tool by name with a map of arguments
-(client/call-tool c "list_directory" {:path "/tmp"})
-
-;; Disconnect and clean up the subprocess/connection
-(client/disconnect c)
+(def server
+  (mcp/create-server
+   {:name "math"
+    :version "1.0.0"
+    :tools
+    [{:name "add"
+      :description "Add two numbers."
+      :inputSchema
+      {:type "object"
+       :properties {:a {:type "number"}
+                    :b {:type "number"}}
+       :required ["a" "b"]
+       :additionalProperties false}
+      :handler
+      (fn [{:keys [a b]} _request-context]
+        {:structuredContent {:sum (+ a b)}})}]}))
 ```
 
----
+The schema is advertised to clients and models. This implementation checks
+that tool arguments are objects, but does not validate every argument against
+the full JSON Schema; validate important input in your handler.
 
-## Server Usage
+### Run the server over stdio
 
-The `mcp.server` namespace allows you to build standalone MCP servers in pure Clojure. This is incredibly useful for exposing Clojure-specific logic (like data transformations, database queries, or REPL operations) to LLM clients like Claude Desktop, Cursor, or your own aJent framework.
-
-### 1. Defining a Server
-
-Define your server as a simple Clojure map. Each tool requires a `:name`, `:description`, an `:inputSchema` (JSON Schema format), and a `:handler` function.
+Stdio is the usual choice when an agent runtime launches its MCP server as a
+child process:
 
 ```clojure
-(ns time-server.core
-  (:require [mcp.server :refer [run-server]])
-  (:import [java.time Instant ZoneId ZonedDateTime]
-           [java.time.format DateTimeFormatter]))
+(mcp/run-stdio server)
+```
 
-(def time-server
-  {:name "TimeServer"
-   :version "1.0.0"
-   :tools [
-     {:name "get_current_utc_time"
-      :description "Returns current UTC time in ISO 8601 format."
-      :inputSchema {:type "object" :properties {} :required []}
-      :handler (fn [_args] (.toString (Instant/now)))}
+Create a `-main` in your application, for example in `src/demo/math.clj`:
 
-     {:name "get_current_local_time"
-      :description "Returns current local system time in ISO 8601 format."
-      :inputSchema {:type "object" :properties {} :required []}
-      :handler (fn [_args]
-                 (.format (ZonedDateTime/now (ZoneId/systemDefault))
-                          (DateTimeFormatter/ISO_ZONED_DATE_TIME)))}
-   ]})
-
+```clojure
 (defn -main [& _args]
-  (run-server time-server))
+  (mcp/run-stdio server))
 ```
 
-### 2. Testing the Server via CLI
+Then launch it from a terminal or process manager:
 
-Because the server communicates purely over standard input/output, you can test it instantly from your terminal by piping JSON-RPC requests into it:
-
-```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-07-24","capabilities":{},"clientInfo":{"name":"test"}}}
-{"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":2,"method":"tools/list"}
-{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_current_local_time","arguments":{}}}' | clj -M:time-server
+```sh
+clojure -M -m demo.math
 ```
 
-### 3. Using with Claude Desktop / MCP Clients
+The child process must write protocol messages only to stdout. Send diagnostic
+logs to stderr instead.
 
-Once you compile your Clojure MCP server into an uberjar (or run it via `clj`), you can register it in any MCP client's configuration file:
+### Run the server over Streamable HTTP
 
-```json
-{
-  "mcpServers": {
-    "clojure-time-server": {
-      "command": "java",
-      "args": ["-jar", "/path/to/your/time-server.jar"]
-    }
-  }
-}
+HTTP is useful when your runtime connects to a separately hosted server:
+
+```clojure
+(def http-server (mcp/run-http server {:port 3000}))
+
+;; During orderly application shutdown:
+((:stop http-server))
 ```
 
----
+The endpoint defaults to `/mcp` and binds to `127.0.0.1`. To change the bind
+address, endpoint path, or authentication:
 
-## Architecture
-
-- `mcp.protocol`: Pure data definitions for JSON-RPC 2.0 and MCP message payloads.
-- `mcp.transport`: Abstract protocol for transport layer communication.
-- `mcp.stdio`: Subprocess management via `java.lang.ProcessBuilder`. Background thread reads stdout and delivers responses to Clojure `promise`s.
-- `mcp.http`: Implements the `2026-07-24` StreamableHTTP spec. Uses `clj-http` to POST requests and automatically captures the `Mcp-Session-Id`.
-- `mcp.client`: High-level API managing request IDs and capability negotiation.
-- `mcp.server`: Reads from `System/in`, routes JSON-RPC methods to your Clojure handlers, and writes to `System/out`.
-
----
-
-## License
-
-Copyright © 2026 Pooria Yousefi
-
-Licensed under the Eclipse Public License - v 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at:
-
-```text
-    https://www.eclipse.org/legal/epl-2.0/
+```clojure
+(def http-server
+  (mcp/run-http server
+                {:ip "127.0.0.1"
+                 :port 3000
+                 :path "/mcp"
+                 :bearer-token (System/getenv "MCP_BEARER_TOKEN")
+                 :allowed-origins #{"https://agent.example.com"}}))
 ```
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+For custom authentication, supply `:authenticate`, a function that receives
+the lower-case HTTP headers map and returns truthy only for authorized
+requests. Do not bind to a public interface without deliberately configuring
+authentication, origin checks, and network protections. The HTTP server emits
+single JSON responses; the client also accepts request-scoped SSE responses
+from other conforming servers.
 
-This Source Code may also be made available under the following Secondary Licenses when the conditions for such availability set forth in the Eclipse Public License, v. 2.0 are satisfied: GNU General Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any later version, with the GNU Classpath Exception which is available at https://www.gnu.org/software/classpath/license.html.
+## 2. Connect to MCP servers
+
+The client supports a process command over stdio or a full HTTP endpoint URL.
+`mcp/connect` is a convenience function for either configuration:
+
+```clojure
+(require '[mcp.client :as mcp])
+
+(def local
+  (mcp/connect {:command ["clojure" "-M" "-m" "demo.math"]
+                :timeout-ms 30000}))
+
+(def remote
+  (mcp/connect {:url "http://127.0.0.1:3000/mcp"
+                :headers {"Authorization"
+                          (str "Bearer " (System/getenv "MCP_BEARER_TOKEN"))}
+                :timeout-ms 30000}))
+```
+
+The same connections can be created explicitly with `connect-stdio` and
+`connect-http`. For stdio, optional `:cwd` and `:env` configure the child
+process. For either transport, `:timeout-ms`, `:client-info`, and
+`:capabilities` customize requests.
+
+Discover server information, list tools, and call a tool:
+
+```clojure
+(mcp/discover local)
+(mcp/list-tools local)
+(mcp/call-tool local "add" {:a 20 :b 22})
+;; => {:resultType "complete"
+;;     :structuredContent {:sum 42}
+;;     :content [{:type "text" :text "{\"sum\":42}"}]
+;;     ...}
+```
+
+`list-tools` follows pagination cursors and caches the result according to
+the server's `ttlMs`. `call-tool` returns the MCP result map. JSON-RPC errors,
+transport failures, and timeouts are thrown as `ExceptionInfo`; inspect
+`(ex-data e)` for details.
+
+### Connect to several servers
+
+Keep each connection under a distinct key. Those keys are used to namespace
+the functions exposed to the model:
+
+```clojure
+(def connections
+  {"math" (mcp/connect-stdio ["clojure" "-M" "-m" "demo.math"])
+   "time" (mcp/connect-stdio ["clojure" "-M:time-server"])
+   "remote-search" (mcp/connect-http "https://tools.example.com/mcp")})
+
+(try
+  (doseq [[server-name connection] connections]
+    (println server-name (mapv :name (mcp/list-tools connection))))
+  ;; Use the connections below.
+  (finally
+    (doseq [connection (vals connections)]
+      (mcp/close! connection))))
+```
+
+Close stdio connections when finished; this closes their child processes.
+Closing an HTTP client connection releases local client state.
+
+## 3. Use tools with an OpenAI-compatible model
+
+`mcp.openai/tools` lists the tools from each connection and converts them to
+OpenAI-compatible function-tool definitions. It returns both the definitions
+to send to the model and a routing table used to execute model-produced calls:
+
+```clojure
+(require '[mcp.openai :as mcp-openai])
+
+(def tool-set (mcp-openai/tools connections))
+(def model-tools (:tools tool-set))
+(def tool-routes (:routes tool-set))
+```
+
+Pass `model-tools` to your provider's chat-completions API along with the
+conversation. Provider SDKs differ, so the following `chat-completions!` is a
+placeholder for your OpenAI-compatible provider client:
+
+```clojure
+(defn run-agent-turn
+  [messages]
+  (loop [messages messages]
+    (let [response
+          (chat-completions!
+           {:messages messages
+            :tools model-tools
+            :tool_choice "auto"})
+          choice (first (:choices response))
+          assistant-message (:message choice)]
+      (if (= "tool_calls" (:finish_reason choice))
+        (let [tool-messages
+              (mcp-openai/execute-tool-calls tool-routes assistant-message)]
+          ;; Keep the assistant message and pair every tool result with its
+          ;; original tool_call_id before asking the model for its next turn.
+          (recur (into (conj messages assistant-message) tool-messages)))
+        {:messages (conj messages assistant-message)
+         :response response}))))
+```
+
+Each result from `execute-tool-calls` has the OpenAI tool-message shape,
+including the original `:tool_call_id`. Calls in one assistant message are
+executed concurrently; returned results preserve the original call order.
+The host remains responsible for authorization, tool allow-lists, user
+approval, model limits, and deciding when to stop the agent loop.
+
+### Restrict tools per agent
+
+Give each agent only the servers it is allowed to use. Build a separate tool
+set and route table from a subset of connections:
+
+```clojure
+(def research-tools
+  (mcp-openai/tools (select-keys connections ["remote-search"])))
+
+(def finance-tools
+  (mcp-openai/tools (select-keys connections ["math"])))
+```
+
+Do not pass a shared route table to an agent that should not be able to invoke
+those tools.
+
+## HTTP header annotations
+
+For HTTP calls, parameters in a tool schema can use `:x-mcp-header` to mirror
+selected values into request headers. Annotated values must be strings,
+integers, or booleans. The client encodes unsafe values, and the server checks
+the header against the request body:
+
+```clojure
+:inputSchema
+{:type "object"
+ :properties {:tenant {:type "string" :x-mcp-header "Tenant"}}
+ :required ["tenant"]}
+```
+
+This feature is for HTTP-aware routing or intermediaries; it is not required
+for ordinary tool calls. Keep authorization decisions in authenticated server
+code rather than trusting a mirrored header by itself.
+
+## Protocol scope
+
+- Fixed protocol version: `2026-07-28`; each request includes version,
+  client identity, and client capabilities.
+- `server/discover`, `tools/list`, and `tools/call`.
+- Newline-delimited UTF-8 JSON-RPC over stdio.
+- Stateless Streamable HTTP POST requests with required MCP headers,
+  origin validation, optional bearer/custom authentication, and support for
+  JSON or SSE responses in the client.
+- OpenAI-compatible tool definition conversion and tool-call execution.
+
+Older MCP versions are rejected; there is no initialize handshake. Features
+outside tool calling are intentionally not implemented.
+
+## Tests
+
+Run the unit and integration suite:
+
+```sh
+clojure -M:test
+```
+
+The suite exercises protocol metadata/version checks, tool dispatch, stdio and
+HTTP client/server round trips, HTTP header/origin validation, and OpenAI
+tool-call routing.
