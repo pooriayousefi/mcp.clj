@@ -21,16 +21,18 @@
     :version version
     :basis @basis
     :src-dirs ["src"]
+    ;; Ignore any local/root pom.xml so pom-data is always applied.
+    :src-pom :none
+    :scm {:url "https://github.com/pooriayousefi/mcp.clj"
+          :connection "scm:git:https://github.com/pooriayousefi/mcp.clj.git"}
     :pom-data
     [[:description "Pure Clojure SDK for the Model Context Protocol (MCP)."]
      [:url "https://github.com/pooriayousefi/mcp.clj"]
      [:licenses
       [:license
        [:name "Eclipse Public License 1.0"]
-       [:url "https://www.eclipse.org/legal/epl-v10.html"]]]
-     [:scm
-      [:url "https://github.com/pooriayousefi/mcp.clj"]
-      [:connection "scm:git:https://github.com/pooriayousefi/mcp.clj.git"]]]})
+       [:url "https://www.eclipse.org/legal/epl-v10.html"]
+       [:distribution "repo"]]]]})
   (b/jar {:class-dir class-dir
           :jar-file jar-file}))
 
