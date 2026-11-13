@@ -10,5 +10,5 @@
            :exec-fn deps-deploy.deps-deploy/deploy
            :exec-args {:installer :remote
                        :artifact "org.clojars.pooriayousefi/mcp.clj"
-                       :version "1.0.0"
+                       :version "1.0.1"
                        :sign-releases? false}}}}
