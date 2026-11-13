@@ -321,3 +321,26 @@ clojure -M:test
 The suite exercises protocol metadata/version checks, tool dispatch, stdio and
 HTTP client/server round trips, HTTP header/origin validation, and OpenAI
 tool-call routing.
+
+
+## Publishing to Clojars
+
+The release version is defined in `build.clj`. Before publishing, run the
+test suite and build/deploy the library:
+
+```sh
+clojure -M:test
+clojure -T:build jar
+clojure -T:build deploy
+```
+
+Configure a Clojars deploy token in the environment before deploying:
+
+```sh
+export CLOJARS_USERNAME="your-clojars-username"
+export CLOJARS_PASSWORD="your-clojars-deploy-token"
+```
+
+Create a deploy token at https://clojars.org/tokens. Use the token as
+`CLOJARS_PASSWORD`; do not use your account password. The deploy task builds
+the source JAR and Maven POM before uploading them.
