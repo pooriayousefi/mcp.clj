@@ -6,6 +6,6 @@
  {:test {:extra-paths ["test"]
          :main-opts ["-m" "mcp.test-runner"]}
   :time-server {:main-opts ["-m" "mcp.time-server"]}
-  :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.9"}
+  :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.14"}
                  slipset/deps-deploy {:mvn/version "0.2.5"}}
           :ns-default build}}}
