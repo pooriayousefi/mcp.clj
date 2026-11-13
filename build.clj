@@ -3,7 +3,7 @@
             [deps-deploy.deps-deploy :as dd]))
 
 (def lib 'org.clojars.pooriayousefi/mcp.clj)
-(def version "1.0.2")
+(def version "1.0.3")
 (def class-dir "target/classes")
 (def jar-file (format "target/%s-%s.jar" (name lib) version))
 (def basis (delay (b/create-basis {:project "deps.edn"})))
@@ -25,7 +25,7 @@
     :src-pom :none
     :scm {:url "https://github.com/pooriayousefi/mcp.clj"
           :connection "scm:git:https://github.com/pooriayousefi/mcp.clj.git"
-          :tag "v1.0.2"}
+          :tag "v1.0.3"}
     :pom-data
     [[:description "Pure Clojure SDK for the Model Context Protocol (MCP)."]
      [:url "https://github.com/pooriayousefi/mcp.clj"]
