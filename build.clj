@@ -24,7 +24,8 @@
     ;; Ignore any local/root pom.xml so pom-data is always applied.
     :src-pom :none
     :scm {:url "https://github.com/pooriayousefi/mcp.clj"
-          :connection "scm:git:https://github.com/pooriayousefi/mcp.clj.git"}
+          :connection "scm:git:https://github.com/pooriayousefi/mcp.clj.git"
+          :tag "v1.0.2"}
     :pom-data
     [[:description "Pure Clojure SDK for the Model Context Protocol (MCP)."]
      [:url "https://github.com/pooriayousefi/mcp.clj"]
